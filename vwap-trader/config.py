@@ -1,0 +1,16 @@
+# ===== OPTION APPROXIMATION =====
+DELTA_CE = 0.8
+DELTA_PE = -0.8
+
+LOT_SIZE = 50
+LOTS = 3
+
+# ===== RISK =====
+MTM_TARGET = 3000
+MTM_SL = -3000
+
+# ===== VWAP LOGIC =====
+VWAP_EXIT_CONFIRM = 2     # candles to confirm VWAP break
+MIN_HOLD_CANDLES = 3
+
+FORCE_EXIT_TIME = "15:15"
