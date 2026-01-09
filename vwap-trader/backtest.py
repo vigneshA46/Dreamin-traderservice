@@ -1,11 +1,20 @@
 import pandas as pd
+from datetime import time
 
-# --- CONFIG (replace with your real values) ---
+# --- CONFIG (replace with your real values) ---'
+
 LOT_SIZE = 65
 LOTS = 1
-FORCE_EXIT_TIME = "15:20"
-MTM_SL = -5000
+MTM_SL = -3000
 MTM_TARGET = 10000
+START_TIME = time(9, 16)     # 09:16 IST
+FORCE_EXIT_TIME = time(15, 20)  # 15:20 IST
+MIN_HOLD_CANDLES = 3
+COOLDOWN_CANDLES = 3
+VWAP_BUFFER = 0.0015   # 0.15%
+MAX_HOLD_MINUTES = 15
+
+
 
 def calculate_pnl(pos, entry_price, exit_price):
     return (exit_price - entry_price) * LOT_SIZE * LOTS if pos == "CE" else (entry_price - exit_price) * LOT_SIZE * LOTS
@@ -23,7 +32,7 @@ def log_trade(entry_time, exit_time, pos, entry, exit, pnl, reason):
     }
 
 def select_strikes(fut_price, strike_interval=50):
-    atm = round(fut_price / strike_interval) * strike_interval
+    atm =  round(fut_price / strike_interval) * strike_interval
     ce_strike = atm - 2 * strike_interval
     pe_strike = atm + 2 * strike_interval
     return ce_strike, pe_strike, atm
@@ -34,97 +43,169 @@ def run_backtest(options_df, fut_price):
     ce_strike, pe_strike, atm = select_strikes(fut_price)
     print(f"ATM: {atm}, 2 ITM CE: {ce_strike}, 2 ITM PE: {pe_strike}")
 
-    ce_df = options_df[(options_df['strike'] == ce_strike) & (options_df['type'] == 'CE')].reset_index()
-    pe_df = options_df[(options_df['strike'] == pe_strike) & (options_df['type'] == 'PE')].reset_index()
+    ce_df = options_df[
+        (options_df['strike'] == ce_strike) &
+        (options_df['option_type'] == 'CE')
+    ].reset_index(drop=True)
+
+    pe_df = options_df[
+        (options_df['strike'] == pe_strike) &
+        (options_df['option_type'] == 'PE')
+    ].reset_index(drop=True)
+
     n = min(len(ce_df), len(pe_df))
 
-    # --- STATE ---
-    ce_positions = []
-    pe_positions = []
+    # --- POSITION STATE ---
+    ce_pos = None
+    pe_pos = None
+
     day_mtm = 0
     mtm_locked = False
 
     for i in range(1, n):
         now = ce_df.loc[i, 'datetime']
-        current_time_str = now.time().strftime("%H:%M")
+        current_time = now.time()
 
-        # --- FORCE EXIT ---
-        if current_time_str >= FORCE_EXIT_TIME:
-            for pos_list, tag, df in [(ce_positions, "CE", ce_df), (pe_positions, "PE", pe_df)]:
-                for pos in pos_list:
-                    if pos["open"]:
-                        pnl = calculate_pnl(tag, pos["entry_price"], df.loc[i, "close"])
-                        trades.append(log_trade(pos["entry_time"], now, tag,
-                                                pos["entry_price"], df.loc[i, "close"], pnl, "TIME_EXIT"))
-                        day_mtm += pnl
-                        pos["open"] = False
-            break
+        # --- BEFORE MARKET START ---
+        if current_time < START_TIME:
+            continue
 
-        if day_mtm <= MTM_SL or day_mtm >= MTM_TARGET:
+        # =========================
+        # FORCE EXIT AT 15:20 IST
+        # =========================
+        if current_time >= FORCE_EXIT_TIME:
+            if ce_pos:
+                exit_price = ce_df.loc[i, 'close']
+                pnl = calculate_pnl("CE", ce_pos["entry_price"], exit_price)
+                trades.append(log_trade(
+                    ce_pos["entry_time"], now, "CE",
+                    ce_pos["entry_price"], exit_price, pnl, "TIME_EXIT"
+                ))
+                day_mtm += pnl
+                ce_pos = None
+
+            if pe_pos:
+                exit_price = pe_df.loc[i, 'close']
+                pnl = calculate_pnl("PE", pe_pos["entry_price"], exit_price)
+                trades.append(log_trade(
+                    pe_pos["entry_time"], now, "PE",
+                    pe_pos["entry_price"], exit_price, pnl, "TIME_EXIT"
+                ))
+                day_mtm += pnl
+                pe_pos = None
+
+            break  # STOP processing after 15:20
+
+
+        # =========================
+        # MTM LOCK
+        # =========================
+        if (day_mtm <= MTM_SL or day_mtm >= MTM_TARGET) and not mtm_locked:
             mtm_locked = True
 
-        # --- SIGNALS ---
+            # FORCE EXIT ALL OPEN POSITIONS
+            if ce_pos:
+                exit_price = ce_df.loc[i, 'close']
+                pnl = calculate_pnl("CE", ce_pos["entry_price"], exit_price)
+                trades.append(log_trade(
+                ce_pos["entry_time"], now, "CE",
+                ce_pos["entry_price"], exit_price, pnl, "MTM_EXIT"
+                ))
+                day_mtm += pnl
+                ce_pos = None
+
+            if pe_pos:
+                exit_price = pe_df.loc[i, 'close']
+                pnl = calculate_pnl("PE", pe_pos["entry_price"], exit_price)
+                trades.append(log_trade(
+                pe_pos["entry_time"], now, "PE",
+                pe_pos["entry_price"], exit_price, pnl, "MTM_EXIT"
+                ))
+                day_mtm += pnl
+                pe_pos = None
+
+            break  # STOP DAY COMPLETELY
+
+
+
+        if current_time >= FORCE_EXIT_TIME:
+            continue
+
+        # =========================
+        # CE DATA
+        # =========================
+        ce_curr_close = ce_df.loc[i, 'close']
+        ce_curr_vwap  = ce_df.loc[i, 'vwap']
         ce_prev_close = ce_df.loc[i-1, 'close']
-        ce_prev_vwap = ce_df.loc[i-1, 'vwap']
+        ce_prev_vwap  = ce_df.loc[i-1, 'vwap']
+
+        # ---- CE ENTRY ----
+        if (
+            not mtm_locked
+            and ce_pos is None
+            and ce_curr_close > ce_curr_vwap
+            and ce_prev_close <= ce_prev_vwap
+            and ce_curr_close > ce_curr_vwap
+        ):
+            ce_pos = {
+            "entry_price": ce_curr_close,   # 🔥 use CLOSE
+            "entry_time": now
+            }
+            print(f"{now} ENTRY CE @ {ce_pos['entry_price']}")
+
+        # ---- CE EXIT ----
+        if (
+            ce_pos
+            and ce_prev_close >= ce_prev_vwap
+            and ce_curr_close < ce_curr_vwap
+            ):
+            exit_price = ce_curr_close
+            pnl = calculate_pnl("CE", ce_pos["entry_price"], exit_price)
+            trades.append(log_trade(
+            ce_pos["entry_time"], now, "CE",
+            ce_pos["entry_price"], exit_price, pnl, "VWAP_EXIT"
+        ))
+            day_mtm += pnl
+            ce_pos = None
+
+
+        # =========================
+        # PE DATA
+        # =========================
+        pe_curr_close = pe_df.loc[i, 'close']
+        pe_curr_vwap  = pe_df.loc[i, 'vwap']
         pe_prev_close = pe_df.loc[i-1, 'close']
-        pe_prev_vwap = pe_df.loc[i-1, 'vwap']
+        pe_prev_vwap  = pe_df.loc[i-1, 'vwap']
 
-        # CE ENTRY
-        if not mtm_locked and ce_prev_close > ce_prev_vwap:
-            ce_positions.append({
-                "open": True,
-                "entry_price": ce_df.loc[i, 'open'],
-                "entry_time": now
-            })
-            print(f"{now} ENTRY CE @ {ce_df.loc[i, 'open']}")
+        # ---- PE ENTRY ----
+        if (
+        not mtm_locked
+        and pe_pos is None
+        and pe_prev_close <= pe_prev_vwap
+        and pe_curr_close > pe_curr_vwap
+        ):
+            pe_pos = {
+            "entry_price": pe_curr_close,
+            "entry_time": now
+            }
+            print(f"{now} ENTRY PE @ {pe_pos['entry_price']}")
 
-            # Check for flip: PE open? Close it
-            for pos in pe_positions:
-                if pos["open"]:
-                    pnl = calculate_pnl("PE", pos["entry_price"], pe_df.loc[i, 'open'])
-                    trades.append(log_trade(pos["entry_time"], now, "PE",
-                                            pos["entry_price"], pe_df.loc[i, 'open'], pnl, "FLIP_EXIT"))
-                    day_mtm += pnl
-                    pos["open"] = False
+        # ---- PE EXIT ----
+        if (
+        pe_pos
+        and pe_prev_close >= pe_prev_vwap
+        and pe_curr_close < pe_curr_vwap
+        ):
+            exit_price = pe_curr_close
+            pnl = calculate_pnl("PE", pe_pos["entry_price"], exit_price)
+            trades.append(log_trade(
+            pe_pos["entry_time"], now, "PE",
+            pe_pos["entry_price"], exit_price, pnl, "VWAP_EXIT"
+            ))
+            day_mtm += pnl
+            pe_pos = None
 
-        # PE ENTRY
-        if not mtm_locked and pe_prev_close < pe_prev_vwap:
-            pe_positions.append({
-                "open": True,
-                "entry_price": pe_df.loc[i, 'open'],
-                "entry_time": now
-            })
-            print(f"{now} ENTRY PE @ {pe_df.loc[i, 'open']}")
 
-            # Check for flip: CE open? Close it
-            for pos in ce_positions:
-                if pos["open"]:
-                    pnl = calculate_pnl("CE", pos["entry_price"], ce_df.loc[i, 'open'])
-                    trades.append(log_trade(pos["entry_time"], now, "CE",
-                                            pos["entry_price"], ce_df.loc[i, 'open'], pnl, "FLIP_EXIT"))
-                    day_mtm += pnl
-                    pos["open"] = False
-
-        # --- EXIT CHECKS ---
-        for pos in ce_positions:
-            if pos["open"]:
-                close = ce_df.loc[i, 'close']
-                pnl = calculate_pnl("CE", pos["entry_price"], close)
-                if close < ce_df.loc[i, 'vwap'] or pnl <= MTM_SL or pnl >= MTM_TARGET:
-                    trades.append(log_trade(pos["entry_time"], now, "CE",
-                                            pos["entry_price"], close, pnl, "VWAP_EXIT"))
-                    day_mtm += pnl
-                    pos["open"] = False
-
-        for pos in pe_positions:
-            if pos["open"]:
-                close = pe_df.loc[i, 'close']
-                pnl = calculate_pnl("PE", pos["entry_price"], close)
-                if close > pe_df.loc[i, 'vwap'] or pnl <= MTM_SL or pnl >= MTM_TARGET:
-                    trades.append(log_trade(pos["entry_time"], now, "PE",
-                                            pos["entry_price"], close, pnl, "VWAP_EXIT"))
-                    day_mtm += pnl
-                    pos["open"] = False
-
-    print(f"\nDAY MTM: {day_mtm}")
+    print(f"\nDAY MTM: {day_mtm:.2f}")
     return pd.DataFrame(trades)
+ 

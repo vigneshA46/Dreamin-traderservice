@@ -1,17 +1,17 @@
 import requests
 import pandas as pd
 
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY3Nzc0MTk5LCJpYXQiOjE3Njc2ODc3OTksInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA3NDI1Mjc1In0.yFkICcYhmCVuYteh86PFq4KJ32Yg4wmYez66Ox1B4GVCcd4lMvn_zs-n1KIydyGPbXOQWGMTAOXLKyPILHW_SQ"
+ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY3ODkyNDIyLCJpYXQiOjE3Njc4MDYwMjIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA3NDI1Mjc1In0.-IrvzQ7_mNhukOzo6VpBva_3MFei2yjwqFR6Hfy35kEpvm5oyeevl9WUPuvElvrFeS2wNfkJycvAuLD4jvVAxw"
 
 URL = "https://api.dhan.co/v2/charts/intraday"
 
 HEADERS = {
     "Content-Type": "application/json",
-    "access-token": ACCESS_TOKEN
+    "access-token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY3ODkyNDIyLCJpYXQiOjE3Njc4MDYwMjIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA3NDI1Mjc1In0.-IrvzQ7_mNhukOzo6VpBva_3MFei2yjwqFR6Hfy35kEpvm5oyeevl9WUPuvElvrFeS2wNfkJycvAuLD4jvVAxw"
 }
 
-FROM_DATE = "2025-12-31 09:15:00"
-TO_DATE   = "2025-12-31 15:30:00"
+FROM_DATE = "2026-1-1 09:15:00"
+TO_DATE   = "2026-1-1 15:30:00"
 INTERVAL  = "1"
 
 INSTRUMENTS = {
@@ -25,20 +25,20 @@ INSTRUMENTS = {
         "oi": True
     },
     "NIFTY_26050_CE": {
-        "securityId": "40469",
+        "securityId": "40471",
         "exchangeSegment": "NSE_FNO",
         "instrument": "OPTIDX",
         "expiry": "2026-01-06",
-        "strike": 26050,
+        "strike": 26100,
         "option_type": "CE",
         "oi": True
     },
     "NIFTY_26250_PE": {
-        "securityId": "40480",
+        "securityId": "40488",
         "exchangeSegment": "NSE_FNO",
         "instrument": "OPTIDX",
         "expiry": "2026-01-06",
-        "strike": 26250,
+        "strike": 26300,
         "option_type": "PE",
         "oi": True
     }
@@ -58,8 +58,10 @@ def fetch_intraday(name, cfg):
     r = requests.post(URL, headers=HEADERS, json=payload)
     data = r.json()
 
+
     df = pd.DataFrame({
-        "datetime": pd.to_datetime(data["timestamp"], unit="s"),
+        "datetime": pd.to_datetime(
+    data["timestamp"], unit="s", utc=True).tz_convert("Asia/Kolkata"),
         "open": data["open"],
         "high": data["high"],
         "low": data["low"],
@@ -91,12 +93,12 @@ if __name__ == "__main__":
     final_df.sort_values(["datetime", "symbol"], inplace=True)
 
     # Save parquet
-    final_df.to_parquet(
-        "nifty_2025_12_31.parquet",
-        engine="pyarrow",
-        compression="snappy"
-    )
+    #final_df.to_parquet(
+     #   "nifty_2026_1_1.parquet",
+      #  engine="pyarrow",
+       # compression="snappy"
+    #)
 
-    print("✅ Parquet saved: nifty_2025_12_31.parquet")
-    print(final_df.head())
+    print("✅ Parquet saved: nifty_2026_1_1.parquet")
+    print(final_df)
  
