@@ -1,22 +1,35 @@
 import pandas as pd
 from backtest import run_backtest
 
-PARQUET_PATH = "nifty_2026-01-01.parquet"
+PARQUET_PATH = "nifty_2026-01-02.parquet"
 
 
 def compute_vwap(df):
     df = df.copy()
-    # Ensure sorted
+
+    # Ensure datetime
+    df["datetime"] = pd.to_datetime(df["datetime"])
+
+    # Sort properly
     df = df.sort_values("datetime")
-    # Reset VWAP every day (important for backtests)
-    df["date"] = df["datetime"].dt.date
-    typical_price = (df["high"] + df["low"] + df["close"]) / 3
-    df["cum_pv"] = (typical_price * df["volume"]).groupby(df["date"]).cumsum()
-    df["cum_vol"] = (
-        df["volume"]
-    ).groupby(df["date"]).cumsum()
-    df["vwap"] = df["cum_pv"] / df["cum_vol"]
-    return df.drop(columns=["cum_pv", "cum_vol", "date"])
+
+    # TradingView VWAP uses CLOSE price
+    price = df["close"]
+
+    # Reset VWAP exactly at 09:15 IST
+    session = (df["datetime"] - pd.Timedelta(hours=9, minutes=15)).dt.date
+    df["session"] = session
+
+    # Cumulative calculations
+    df["cum_pv"] = (price * df["volume"]).groupby(session).cumsum()
+    df["cum_vol"] = df["volume"].groupby(session).cumsum()
+
+    # VWAP
+    df["vwap"] = df["cum_pv"] / df["cum_vol"].replace(0, pd.NA)
+    print("VWAP CALCULATION")
+    print(df["vwap"])
+
+    return df.drop(columns=["cum_pv", "cum_vol", "session"])
 
 
 def main():

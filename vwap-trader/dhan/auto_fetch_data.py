@@ -3,13 +3,16 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 from io import StringIO
-
+from dotenv import load_dotenv
+import os
 
 # =========================
 # CONFIG
 # =========================
 
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY4MDI2MTYyLCJpYXQiOjE3Njc5Mzk3NjIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA3NDI1Mjc1In0.kn-oxtkC9BEsyJOmtQ1oC46XvdgopoVd4S0CwfRqI7b1HBXayAcwDJKirC7Ey44M8smkJnCGW8XH63vmFAHzbw"
+load_dotenv()
+
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 
 INSTRUMENT_URL = "https://api.dhan.co/v2/instrument/NSE_FNO"
 HIST_URL = "https://api.dhan.co/v2/charts/intraday"
