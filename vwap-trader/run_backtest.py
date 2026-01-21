@@ -1,7 +1,7 @@
 import pandas as pd
 from backtest import run_backtest
 
-PARQUET_PATH = "nifty_2026-01-02.parquet"
+PARQUET_PATH = "nifty_2026-01-16.parquet"
 
 
 def compute_vwap(df):

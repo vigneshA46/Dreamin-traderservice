@@ -14,7 +14,7 @@ def backtest_range_breakout(parquet_path):
 
     pe_5m = df[(df.option_type == "PE") & (df.interval == 5)].sort_values("datetime")
     pe_1m = df[(df.option_type == "PE") & (df.interval == 1)].sort_values("datetime")
-    
+
     ce_strike = ce_1m["strike"].iloc[0]
     pe_strike = pe_1m["strike"].iloc[0]
     print("CE strike ",ce_strike)

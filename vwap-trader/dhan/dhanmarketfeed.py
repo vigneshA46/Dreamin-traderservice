@@ -1,12 +1,21 @@
 from dhanhq import marketfeed
+from dotenv import load_dotenv
 import os
 
+# =========================
+# CONFIG
+# =========================
+
+load_dotenv()
+
+access_token = os.getenv("ACCESS_TOKEN")
+
+
 client_id = "1107425275"
-access_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY4MzgzMTAyLCJpYXQiOjE3NjgyOTY3MDIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA3NDI1Mjc1In0.VKgFq0YX76Vouw1_i4O4Mw7x_nmgMoflaMrZ5lrETnBrq4kf2qEdE6s0j67PzLAEzTAoUaCk-CueVJNoX_ckqg"
 
 instruments = [
     (marketfeed.NSE_FNO, "49229", marketfeed.Ticker),  # NIFTY FUT
-    (marketfeed.NSE_FNO, "49229", marketfeed.Full)
+    (marketfeed.NSE_FNO, "49229", marketfeed.Full),
 ]
 
 feed = marketfeed.DhanFeed(

@@ -175,7 +175,7 @@ def find_option(df, strike, opt_type, trade_date):
 
 if __name__ == "__main__":
 
-    TRADE_DATE = "2026-01-03"
+    TRADE_DATE = "2026-01-01"
     trade_date = pd.to_datetime(TRADE_DATE)
 
     from_dt = f"{TRADE_DATE} {FROM_TIME}"
